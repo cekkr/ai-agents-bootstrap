@@ -26,6 +26,7 @@ When a fact cannot be established, the agent MUST write `Unknown — verify befo
 6. How is the project built, run, tested, debugged, packaged, and released?
 7. Which behavior is shipped, experimental, generated, deprecated, or only planned?
 8. What must be checked before editing and before committing?
+9. Which features span multiple files, and which recurring mistakes or bug patterns must not be reintroduced?
 
 `AGENTS.md` is NOT:
 
@@ -133,6 +134,12 @@ Find the rules most likely to be broken by an adjacent edit, including:
 
 Each critical contract SHOULD link both its enforcing implementation and its focused tests.
 
+### 6. Inventory features and recurring failure modes
+
+Trace meaningful features from their public entry points through their owners and tests. Inspect regression test names, focused comments, issue/roadmap references, and relevant history when they explain a non-obvious implementation rule.
+
+Record durable lessons, not incident chronology. A past bug is relevant when its cause is still easy to reintroduce, its fix establishes a reusable pattern, or its regression test is otherwise hard to discover. Verify that an alleged bug or workaround still applies to the checked-out revision before documenting it.
+
 ## Required AGENTS.md Structure
 
 Every root `AGENTS.md` MUST contain the sections below. Rename headings to fit the project, but do not omit the information. A section MAY say “Not applicable” with a reason when the category genuinely does not exist.
@@ -196,34 +203,73 @@ Describe process boundaries, external services, asynchronous workers, plugins, g
 
 Use a diagram only when it makes relationships clearer than a short flow.
 
-### 7. Linked source tree
+### 7. Linked source tree and file reference
 
-This section is mandatory and MUST use clickable relative Markdown links.
+This section is mandatory and MUST use clickable relative Markdown links. It MUST be a navigable file reference, not a bulleted inventory of paths.
 
-Each entry MUST answer:
-
-- What does this path own?
-- What should be changed here?
-- What important boundary or caller depends on it?
-- Where are the relevant tests when the association is not obvious?
+Every meaningful file MUST have its own linked third-level heading. The description and symbol list belong under that heading so an agent can search for a filename, understand a snippet, and identify the correct edit point without inferring ownership from a directory name.
 
 Preferred format:
 
 ```markdown
-- [`src/runtime/executor.c`](src/runtime/executor.c) — executes decoded programs, owns call frames and trap propagation; parser code must not mutate runtime state. Covered by [`tests/runtime/`](tests/runtime/).
+### [`src/runtime/executor.c`](src/runtime/executor.c)
+
+Executes decoded programs and owns call frames and trap propagation. Change this file for runtime execution semantics; parser code MUST NOT mutate the state owned here.
+
+- **Key functions and subparts:**
+  - `execute_program` — drives the instruction loop.
+  - `push_frame` — validates and creates call frames.
+  - `raise_trap` — normalizes runtime failures.
+- **Called by / depends on:** [`src/runtime/runtime.c`](src/runtime/runtime.c) creates the execution context; decoded instructions come from [`src/parser/decoder.c`](src/parser/decoder.c).
+- **Tests:** [`tests/runtime/test_executor.c`](tests/runtime/test_executor.c) covers frame lifetime and trap propagation.
+- **Common mistakes:** Do not bypass `raise_trap` by returning parser errors directly; doing so loses runtime location data.
 ```
+
+Each file subsection MUST answer, when applicable:
+
+- What responsibility does this file own, and what does it explicitly not own?
+- Which changes belong here?
+- Which meaningful functions, classes, types, constants, registrations, phases, or internal subparts help an agent locate behavior? Explain what each one does; do not merely copy a symbol list.
+- What calls, imports, generates, configures, or otherwise depends on it?
+- Where are its focused tests, fixtures, schemas, or generated outputs?
+- What snippet-level misunderstanding, ordering rule, side effect, or tempting wrong edit commonly causes a regression here?
 
 Rules:
 
+- Do not use bullets as the list of files. Start each meaningful file with `### [`path/to/file`](path/to/file)` and use bullets only for details inside that file's subsection.
 - Link real tracked files or directories. Use code formatting without a link for generated/runtime paths that are intentionally untracked.
 - Do not use a non-clickable code-fenced tree as the only source map.
-- Do not write only “contains utilities” or “handles business logic.” Name the responsibilities.
-- For a small repository, describe every meaningful source file.
-- For a large repository, describe every top-level source area and every entry point, registry, boundary, hotspot, and non-obvious owner. Group repetitive leaf files under a linked directory.
+- Do not write only “contains utilities” or “handles business logic.” Name the responsibilities and the code landmarks that implement them.
+- Include all meaningful public and private symbols or subparts needed to navigate the file. Omit trivial accessors, mechanical wrappers, and repetitive helpers unless they carry a contract or are easy to misuse.
+- Keep symbol descriptions synchronized with renames and refactors. Never invent a symbol from its likely name; verify it in the checked-out source.
+- For a small repository, describe every meaningful source, test, build, configuration, schema, migration, and automation file.
+- For a large repository, give individual subsections to every entry point, registry, boundary, hotspot, and non-obvious owner. A linked directory subsection MAY summarize repetitive leaf files only when it names the grouping rule, important exceptions, and the files that require their own subsections.
 - Link nested `AGENTS.md` files where local rules apply.
-- Remove or update entries in the same change that moves, renames, splits, or deletes code.
+- Remove or update subsections in the same change that moves, renames, splits, or deletes code.
 
-### 8. Interface ownership map
+### 8. Features and recurring development pitfalls
+
+Provide a project-wide map of behavior and hard-won implementation knowledge. This section complements the per-file reference: it explains features that cross files and mistakes that recur across tasks or are likely when prior context is absent.
+
+Give each meaningful feature its own `###` heading and record:
+
+- its user- or operator-visible behavior and current status (`Shipped`, `Experimental/scaffold`, `Known gap`, or `Planned`);
+- its entry point and main control/data path;
+- its owning files and key symbols;
+- its configuration, persistence, security, compatibility, or platform constraints;
+- its focused tests and known gaps.
+
+Give each recurring error, bug pattern, or confusing implementation detail its own `###` heading and record:
+
+- the observable symptom or incorrect assumption;
+- the underlying cause and the invariant that prevents it;
+- the files and symbols where the mistake is commonly introduced;
+- the safe implementation pattern and the focused test or command that detects regression;
+- whether it is an active known bug, a deliberate limitation, or a previously fixed failure mode that remains a regression risk.
+
+Do not turn this section into a chronological bug log. Consolidate repeated incidents into the current rule. Active defects MUST also appear under `Known Gaps`; fixed bugs belong here only when they reveal a non-obvious, reusable lesson that a future agent could otherwise repeat.
+
+### 9. Interface ownership map
 
 Include the public surfaces relevant to the project:
 
@@ -238,7 +284,7 @@ Include the public surfaces relevant to the project:
 
 The authoritative registry or manifest MUST be linked. Do not duplicate enormous generated API references; map surfaces to owners.
 
-### 9. Build, run, test, debug, and release checklist
+### 10. Build, run, test, debug, and release checklist
 
 Commands MUST be exact, copyable, and taken from current project configuration.
 
@@ -257,13 +303,13 @@ Include as applicable:
 
 State which commands mutate data, need credentials, require hardware, or contact external systems.
 
-### 10. Test ownership map
+### 11. Test ownership map
 
 Map each critical subsystem and contract to focused tests. Mention shared fixtures and helpers. Record known test gaps explicitly.
 
 Do not hard-code a total test count unless a tool generates and verifies that count automatically; manual counts become stale.
 
-### 11. Data, security, privacy, and compatibility boundaries
+### 12. Data, security, privacy, and compatibility boundaries
 
 State, when applicable:
 
@@ -278,7 +324,7 @@ State, when applicable:
 
 Do not expose real secret values in examples.
 
-### 12. Current status, known gaps, and roadmap snapshot
+### 13. Current status, known gaps, and roadmap snapshot
 
 Separate these labels visibly:
 
@@ -289,7 +335,7 @@ Separate these labels visibly:
 
 Link the detailed roadmap/backlog instead of copying it wholesale. Keep only priorities that help an agent make the next correct architectural decision.
 
-### 13. Task start and handoff checklist
+### 14. Task start and handoff checklist
 
 End with a short checklist that forces the next agent to inspect ownership, principles, data boundaries, focused tests, documentation impact, and validation before changing code.
 
@@ -300,6 +346,8 @@ Every project `AGENTS.md` MUST follow these writing rules:
 - Use present tense for current behavior and future tense or explicit `Planned` labels for unimplemented work.
 - Use imperative language for requirements. Avoid “consider,” “maybe,” “ideally,” or “should probably” unless the choice is genuinely optional and its tradeoff is stated.
 - Name the exact symbol, file, route, command, schema, environment variable, or test that enforces a rule.
+- Give every meaningful file its own linked `###` subsection in the source reference; never flatten file descriptions into an inventory bullet list.
+- Within each file subsection, name and explain the meaningful functions, classes, types, registrations, phases, and other code landmarks needed to find behavior or interpret snippets safely.
 - Make every repository path in reference sections a relative Markdown link when it is tracked and linkable.
 - Define acronyms and project-specific vocabulary on first use.
 - Distinguish user-facing terminology from internal/legacy names.
@@ -319,11 +367,12 @@ At the start of every task, the agent MUST:
 3. Identify the owning source paths and focused tests from the source map.
 4. Read the relevant principle, contract, schema, roadmap, or security document.
 5. Compare the handbook's claim with current code before relying on it.
-6. Note which handbook sections may change as a result of the task.
+6. Check the relevant feature path and recurring pitfalls before changing behavior.
+7. Note which handbook sections may change as a result of the task.
 
 At the end of every task, the agent MUST:
 
-1. Update every handbook fact changed or discovered by the task.
+1. Update every handbook fact changed or discovered by the task, including affected file symbols, feature paths, and reusable failure-prevention guidance.
 2. Remove stale instructions made false by the change.
 3. Update human docs, roadmap, ADRs, schemas, or optimization logs when their governed facts changed.
 4. Validate commands/links touched by the task.
@@ -337,14 +386,17 @@ An edit that changes a documented fact MUST update `AGENTS.md` in the same coher
 
 | Change made | Mandatory handbook update |
 | --- | --- |
-| Add, move, split, rename, or delete source | Update the linked source tree and ownership description. |
+| Add, move, split, rename, or delete source | Add, move, rewrite, or remove its linked file subsection; update ownership, meaningful symbols/subparts, callers, tests, and file-specific mistakes. |
+| Add or substantially change a meaningful function, class, type, registration, phase, or other code landmark | Update the owning file subsection when the landmark helps locate behavior, carries a contract, or is easy to misuse. |
 | Add or change an entry point, route, command, screen, API, protocol message, plugin hook, or hardware interface | Update the interface ownership map and relevant contract. |
+| Add or materially change a feature | Update the feature map with its status, path, owners, constraints, tests, and known gaps. |
 | Change project identity, terminology, product scope, or principle | Update mission/principles and synchronize public docs. |
 | Add a configuration key, environment variable, feature flag, dependency, platform, or prerequisite | Update configuration and build/run instructions. |
 | Change authorization, privacy, security, signing, trust, or retention behavior | Update critical contracts and data/security boundaries; link focused tests. |
 | Change persisted state, schema, file/wire format, migration, cache, or replication | Update data flow, compatibility rules, migration commands, and restart/round-trip tests. |
 | Change concurrency, lifecycle, ownership, resource, or performance assumptions | Update critical contracts, architecture flow, and benchmark/observability guidance. |
 | Add, move, or remove tests/fixtures | Update the test ownership map and known gaps. |
+| Fix or discover a confusing bug pattern | Add or consolidate durable prevention guidance under recurring development pitfalls and the relevant file subsection; keep active defects under `Known Gaps`. |
 | Add a generated file or directory | Document its generator and source of truth; do not treat generated output as the owner. |
 | Implement roadmap work | Move it from `Planned` to `Shipped` only after implementation and verification. |
 | Discover future work or an optimization | Add it to the authoritative roadmap/backlog/optimization file and link it; do not present it as current behavior. |
@@ -388,6 +440,9 @@ An `AGENTS.md` construction or update is not complete until all applicable check
 - Current, experimental, missing, and planned behavior are not mixed.
 - Commands come from current manifests/CI/scripts.
 - The source map covers all important top-level areas, entry points, registries, boundaries, and hotspots.
+- Meaningful files use linked `###` headings rather than file-inventory bullets, and their important symbols/subparts are explained.
+- Cross-file features map status, flow, owners, constraints, tests, and gaps.
+- Recurring development pitfalls state symptom, cause, prevention, and regression check without becoming a changelog.
 - Tests are mapped to the contracts they protect.
 - Generated/runtime data is distinguished from source.
 - No secrets or personal data appear.
@@ -419,6 +474,8 @@ An `AGENTS.md` construction or update is not complete until all applicable check
 The agent MUST repair these patterns when found:
 
 - **Thin map:** only a project summary and three generic directories.
+- **Flat file inventory:** files appear as one-line bullets, leaving no stable place for symbol descriptions, callers, tests, or file-specific mistakes.
+- **Unexplained symbol dump:** function and class names are copied without saying what behavior they locate, what calls them, or why they matter.
 - **Changelog blob:** hundreds of chronological “now does X” bullets with no ownership structure.
 - **Unlinked inventory:** paths in backticks with no clickable source map.
 - **README clone:** public marketing/setup prose copied without agent-specific contracts.
@@ -431,6 +488,7 @@ The agent MUST repair these patterns when found:
 - **Hidden exceptions:** the rule appears in one section and its exception many pages later.
 - **Generated ownership:** generated output described as the place to implement behavior instead of its generator/source.
 - **Everything is critical:** too many undifferentiated directives, making real invariants forgettable.
+- **Bug diary:** dated incidents and superseded workarounds obscure the current reusable rule and whether a defect is still active.
 
 ## Recommended Root AGENTS.md Skeleton
 
@@ -469,11 +527,39 @@ Use this as a starting outline after discovery. Replace every placeholder and re
 
 `<entry>` → `<interface>` → `<domain>` → `<persistence/external boundary>`
 
-## Linked Source Tree
+## Linked Source Tree and File Reference
 
-### <Area>
+### [`path/to/file`](path/to/file)
 
-- [`path/to/file`](path/to/file) — <ownership, boundary, relevant tests>.
+<Responsibility, changes that belong here, and responsibility this file does not own.>
+
+- **Key functions and subparts:**
+  - `<symbol>` — <meaning, responsibility, and relevant ordering or side effect>.
+  - `<symbol>` — <meaning and relationship to the other subparts>.
+- **Called by / depends on:** [`path/to/caller`](path/to/caller); [`path/to/dependency`](path/to/dependency).
+- **Tests:** [`path/to/focused_test`](path/to/focused_test).
+- **Common mistakes:** <file-specific misunderstanding and safe pattern>.
+
+### [`path/to/another_file`](path/to/another_file)
+
+<Repeat for every meaningful file; do not replace file subsections with a bulleted inventory.>
+
+## Features and Recurring Development Pitfalls
+
+### <Feature name> — <Shipped | Experimental/scaffold | Known gap | Planned>
+
+- **Behavior:** <visible behavior and boundaries>.
+- **Flow and owners:** `<entry>` → [`owner`](path/to/owner) (`<key symbol>`) → [`boundary`](path/to/boundary).
+- **Constraints:** <configuration, persistence, security, compatibility, or platform rules>.
+- **Tests and gaps:** [`focused test`](path/to/test); <remaining gap or `None known`>.
+
+### <Pitfall or bug pattern>
+
+- **Symptom / wrong assumption:** <what an agent observes or may incorrectly infer>.
+- **Cause and invariant:** <why it happens and the rule that prevents it>.
+- **Risk area:** [`path/to/file`](path/to/file) (`<symbol>`).
+- **Safe pattern / regression check:** <implementation guidance>; [`test`](path/to/test) or `<verified command>`.
+- **Status:** <active known bug | deliberate limitation | fixed regression risk>.
 
 ## Interface Ownership Map
 
@@ -526,6 +612,8 @@ The bootstrap task is complete only when the repository's `AGENTS.md`:
 - is derived from inspected source and authoritative documents;
 - gives an unambiguous hierarchy of principles and current facts;
 - contains a precise, clickable ownership map;
+- gives each meaningful file a searchable subsection with responsibilities, important code landmarks, dependencies, tests, and common mistakes;
+- maps cross-file features and preserves durable prevention guidance for recurring bug patterns;
 - exposes dangerous contracts and exceptions near their enforcing code;
 - separates shipped, experimental, missing, and planned work;
 - provides verified workflows and test ownership;
